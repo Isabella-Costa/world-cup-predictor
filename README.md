@@ -60,8 +60,8 @@ Também é possível inverter a consulta: escolher uma **etapa** (ex: Final) e v
 O sistema segue uma arquitetura de **sistema baseado em conhecimento**, dividida em três camadas:
 
 - **Base de conhecimento**: dados históricos de Copas do Mundo (partidas, seleções, perfis) usados para treinar e alimentar o modelo.
-- **Motor de inferência**: rede neural (nível partida) + simulação de Monte Carlo (nível torneio).
-- **Interface**: camada de apresentação em Streamlit, onde o usuário interage com o sistema.
+- **Motor de inferência**: rede neural (nível partida) + simulação nível torneio.
+- **Interface**: camada de apresentação em xxxx, onde o usuário interage com o sistema.
 
 ---
 
@@ -110,15 +110,11 @@ world-cup-predictor/
 ├── notebooks/
 │   └── eda.ipynb           # Análise exploratória dos dados
 ├── src/
-│   ├── preprocessing.py    # Limpeza e junção dos datasets
-│   ├── train_model.py      # Treinamento da rede neural
-│   ├── evaluate.py         # Cálculo de métricas (accuracy, precision, recall, F1)
-│   ├── simulate.py         # Simulação de Monte Carlo da chave
-│   └── model.py            # Definição da arquitetura da rede
-├── models/
-│   └── neural_net.h5       # Modelo treinado salvo
+│   ├── data_preparation.py    # Limpeza e junção dos datasets
+│   ├── data_prep_jogador.py   # Preparação dos dados de jogadores
+│   ├── data_validation.py   # Validação dos dados de jogos
 ├── app/
-│   └── streamlit_app.py    # Interface do usuário
+│   └── .py    # Interface do usuário
 ├── requirements.txt
 └── README.md
 ```
@@ -129,7 +125,7 @@ world-cup-predictor/
 
 ```bash
 # Clonar o repositório
-git clone https://github.com/<usuario>/world-cup-predictor.git
+git clone [https://github.com/<usuario>/world-cup-predictor.git]
 cd world-cup-predictor
 
 # Criar ambiente virtual (opcional, mas recomendado)
@@ -139,7 +135,7 @@ source venv/bin/activate   # Windows: venv\Scripts\activate
 # Instalar dependências
 pip install -r requirements.txt
 
-# Treinar o modelo (opcional, já vem um modelo treinado em /models)
+# Treinar o modelo (
 python src/train_model.py
 
 # Rodar a interface
