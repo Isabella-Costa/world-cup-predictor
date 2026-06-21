@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 
-# Configurações Visuais
+# CONFIGURAÇÕES GERAIS
 sns.set_theme(style="whitegrid")
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['font.size'] = 12
@@ -16,6 +16,7 @@ PLOTS_DIR = os.path.join(BASE_DIR, 'reports', 'figures')
 
 os.makedirs(PLOTS_DIR, exist_ok=True)
 
+# Carrega os dados processados
 try:
     df = pd.read_csv(os.path.join(PROCESSED_DIR, 'dataset_final.csv'))
     print(f"Dados Carregados: {df.shape[0]} partidas e {df.shape[1]} features.")
@@ -24,48 +25,34 @@ except FileNotFoundError:
     df = None
 
 if df is not None:
-    fig, axes = plt.subplots(1, 2, figsize=(18, 6))
-
-    sns.countplot(ax=axes[0], x='resultado', data=df, hue='resultado', palette=PALETTE, legend=False)
-    axes[0].set_title('Distribuição Global dos Resultados\n(0 = Vitória B, 1 = Empate, 2 = Vitória A)')
-    axes[0].set_xlabel('Resultado')
-
-    # 1B. Cauda Longa - Aparições por Seleção
-    todas_selecoes = pd.concat([df['team_a_name'], df['team_b_name']])
-    aparicoes = todas_selecoes.value_counts()
-
-    sns.lineplot(ax=axes[1], x=range(len(aparicoes)), y=aparicoes.values, color='#2E8B57')
-    axes[1].axhline(y=10, color='red', linestyle='--', label='Corte (10 partidas)')
-    axes[1].set_yscale('log')
-    axes[1].set_title('Cauda Longa: Frequência das Seleções em Copas')
-    axes[1].set_ylabel('Qtd Partidas (Log)')
-    axes[1].legend()
-
+    # DISTRIBUIÇÃO GLOBAL DOS RESULTADOS
+    plt.figure(figsize=(10, 6))
+    sns.countplot(x='resultado', data=df, hue='resultado', palette=PALETTE, legend=False)
+    plt.title('Distribuição Global dos Resultados\n(0 = Vitória B, 1 = Empate, 2 = Vitória A)')
+    plt.xlabel('Resultado')
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, '01_distribuicao_e_cauda_longa.png'), bbox_inches='tight', dpi=300)
+    plt.savefig(os.path.join(PLOTS_DIR, '01_distribuicao_global.png'), bbox_inches='tight', dpi=300)
     plt.show()
 
+    # PARTICIPAÇÃO POR CONFEDERAÇÃO
     plt.figure(figsize=(12, 6))
     confederacoes = pd.concat([df['confederation_name_a'], df['confederation_name_b']]).value_counts()
     
     sns.barplot(x=confederacoes.values, y=confederacoes.index, hue=confederacoes.index, palette=PALETTE, legend=False)
-    
     plt.title('Participação por Confederação (Peso Geopolítico no Futebol)')
     plt.xlabel('Número de Aparições em Partidas')
     plt.tight_layout()
-    
     plt.savefig(os.path.join(PLOTS_DIR, '02_confederacoes.png'), bbox_inches='tight', dpi=300)
     plt.show()
 
+    # MATRIZ DE CORRELAÇÃO 
     numeric_df = df.select_dtypes(include=[np.number])
-    
     cols_to_exclude = ['year', 'team_a_score', 'team_b_score']
     cols_for_corr = [c for c in numeric_df.columns if c not in cols_to_exclude]
 
     print(f"Calculando correlação de {len(cols_for_corr)} features...")
     corr_matrix = numeric_df[cols_for_corr].corr()
 
-    # Plotar o Heatmap
     plt.figure(figsize=(16, 12))
     sns.heatmap(
         corr_matrix, 
@@ -76,14 +63,43 @@ if df is not None:
         linewidths=0.1, 
         cbar_kws={"shrink": 0.8}
     )
-
     plt.title('Matriz de Correlação: Features Numéricas vs Resultado', fontsize=18)
     plt.xticks(rotation=45, ha='right', fontsize=10) 
     plt.yticks(fontsize=10)
     plt.tight_layout()
-    
-    # Salva a imagem
     plt.savefig(os.path.join(PLOTS_DIR, '03_matriz_correlacao.png'), bbox_inches='tight', dpi=300)
+    plt.show()
+
+    # DINHEIRO VS HABILIDADE
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(
+        data=df, 
+        x='valor_a', 
+        y='gols_elite_a', 
+        hue='resultado', 
+        palette=['#e74c3c', '#95a5a6', '#2ecc71'], # Vermelho (Vitória B), Cinza (Empate), Verde (Vitória A)
+        alpha=0.7, 
+        s=80
+    )
+    plt.title('Fronteira de Decisão: Valor de Mercado vs Gols na Elite (Time A)')
+    plt.xlabel('Valor de Mercado (Euros)')
+    plt.ylabel('Gols nas Ligas de Elite')
+    plt.legend(title='Resultado', labels=['Vitória B', 'Empate', 'Vitória A'])
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, '04_dispersao_dinheiro_habilidade.png'), bbox_inches='tight', dpi=300)
+    plt.show()
+
+    # MATRIZ DE CONFRONTOS CONTINENTAIS
+    vitorias_A = df[df['resultado'] == 2]
+    cross_tab = pd.crosstab(vitorias_A['confederation_name_a'], vitorias_A['confederation_name_b'])
+    
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cross_tab, annot=True, fmt="d", cmap='YlGnBu', cbar_kws={'label': 'Nº de Vitórias da Confederação A'})
+    plt.title('Mapa de Domínio: Vitórias Continentais (Confederação A vs B)')
+    plt.xlabel('Confederação Derrotada (Time B)')
+    plt.ylabel('Confederação Vencedora (Time A)')
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, '05_matriz_confrontos_continentais.png'), bbox_inches='tight', dpi=300)
     plt.show()
 
     print("\n--- O que mais influencia o 'resultado'? ---")
