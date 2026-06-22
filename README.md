@@ -135,11 +135,10 @@ source venv/bin/activate   # Windows: venv\Scripts\activate
 # Instalar dependências
 pip install -r requirements.txt
 
-# Treinar o modelo (
-python src/train_model.py
+# Treinar o modelo 
 
 # Rodar a interface
-streamlit run app/streamlit_app.py
+
 ```
 
 ---
