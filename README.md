@@ -135,7 +135,7 @@ source venv/bin/activate   # Windows: venv\Scripts\activate
 # Instalar dependências
 pip install -r requirements.txt
 
-# Treinar o modelo (
+# Treinar o modelo 
 
 # Rodar a interface
 
