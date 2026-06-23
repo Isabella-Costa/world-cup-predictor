@@ -45,7 +45,6 @@ print("A aplicar o SMOTE para balancear a matriz de treino...")
 smote = SMOTE(random_state=42)
 X_train_balanced, y_train_balanced = smote.fit_resample(X_train, y_train)
 
-# Treino do Modelo Campeão (Random Forest)
 print("A treinar a Floresta Aleatória (RandomForestClassifier)...")
 rf_model = RandomForestClassifier(random_state=42, n_estimators=100)
 
