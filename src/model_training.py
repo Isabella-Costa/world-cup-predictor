@@ -13,7 +13,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 warnings.filterwarnings("ignore")
 
-print("A iniciar o Campeonato de Algoritmos...")
+print("Comparação de Algoritmos:")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROCESSED_DIR = os.path.join(BASE_DIR, 'data', 'processed')
@@ -29,7 +29,6 @@ X = df.drop(columns=['resultado'])
 y = df['resultado'].astype(int)
 
 # Tratamento e Escalonamento
-print("A aplicar SimpleImputer e RobustScaler...")
 imputer = SimpleImputer(strategy='median')
 X_imputed = imputer.fit_transform(X)
 
