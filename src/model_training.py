@@ -66,7 +66,7 @@ for nome, modelo in modelos.items():
     print(f"Acurácia: {acc * 100:.2f}%")
 
 # ==========================================
-# 5. RANKING FINAL
+# RANKING FINAL
 # ==========================================
 print("\n" + "="*50)
 print("AVALIAÇÃO FINAL DOS MODELOS")
