@@ -8,8 +8,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 import joblib
 
-print(" A iniciar o pipeline: Random Forest...")
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROCESSED_DIR = os.path.join(BASE_DIR, 'data', 'processed')
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
