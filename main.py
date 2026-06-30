@@ -1,14 +1,20 @@
 import os
 import pandas as pd
+# pyrefly: ignore [missing-import]
 import joblib
 import warnings
 import time
+# pyrefly: ignore [missing-import]
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import RobustScaler
+# pyrefly: ignore [missing-import]
 from imblearn.over_sampling import SMOTE
-from sklearn.metrics import accuracy_score, classification_report
+
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # Modelos
 from sklearn.neural_network import MLPClassifier
@@ -80,7 +86,8 @@ def preparar_dados(caminho_csv):
     return X_train_balanced, X_test, y_train_balanced, y_test, scaler, imputer, features_esperadas
 
 # 3. TUNING 
-def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta_modelos):
+# 3. TUNING 
+def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta_modelos, pasta_relatorios):
     print("\n" + "="*50)
     print(f"INICIAR TUNING: {nome_modelo}")
     print("="*50)
@@ -88,24 +95,18 @@ def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta
     modelo_base = config["modelo_base"]
     parametros = config["parametros"]
     
-    # Configurar o GridSearchCV
-    # cv=3 significa Validação Cruzada (divide o treino em 3 partes para testar)
-    # n_jobs=-1 usa todos os núcleos do teu processador para ser mais rápido
     grid_search = GridSearchCV(estimator=modelo_base, param_grid=parametros, cv=3, scoring='accuracy', n_jobs=-1, verbose=1)
     
-    # Iniciar o treino intensivo
     start_time = time.time()
     grid_search.fit(X_train, y_train)
     tempo_treino = time.time() - start_time
     
-    # Extrair os melhores resultados
     melhor_modelo = grid_search.best_estimator_
     melhores_params = grid_search.best_params_
     
     print(f"\n✅ Tuning concluído em {tempo_treino:.2f} segundos!")
     print(f"Melhores Parâmetros Encontrados: {melhores_params}")
     
-    # Avaliar o melhor modelo no conjunto de Teste 
     y_pred = melhor_modelo.predict(X_test)
     acuracia = accuracy_score(y_test, y_pred)
     
@@ -113,7 +114,23 @@ def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta
     print("\nRelatório de Classificação Detalhado:")
     print(classification_report(y_test, y_pred))
     
-    # Guardar o modelo campeão na pasta models
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(8, 6))
+    labels = ['Derrota (0)', 'Empate (1)', 'Vitória (2)']
+    
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=labels, yticklabels=labels, cbar=True)
+    plt.title(f'Matriz de Confusão - {nome_modelo}', fontsize=14, pad=15)
+    plt.ylabel('Resultado Real', fontsize=12)
+    plt.xlabel('Previsão do Modelo', fontsize=12)
+    plt.tight_layout()
+    
+    # Guardar a imagem na pasta reports
+    nome_ficheiro_matriz = os.path.join(pasta_relatorios, f"matriz_confusao_{nome_modelo.replace(' ', '_').lower()}.png")
+    plt.savefig(nome_ficheiro_matriz)
+    plt.close() # Fecha o gráfico na memória para não sobrecarregar
+    print(f"Gráfico da Matriz de Confusão guardado em: {nome_ficheiro_matriz}")
+    # ==========================================
+    
     caminho_salvar = os.path.join(pasta_modelos, f"{nome_modelo.replace(' ', '_').lower()}_tunnado.pkl")
     joblib.dump(melhor_modelo, caminho_salvar)
     print(f"Modelo guardado em: {caminho_salvar}")
@@ -123,18 +140,22 @@ def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta
 # 4. EXECUÇÃO PRINCIPAL 
 if __name__ == "__main__":
     # CONFIGURAÇÕES DE DIRETÓRIO 
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    
     PROCESSED_DIR = os.path.join(BASE_DIR, 'data', 'processed')
     MODELS_DIR = os.path.join(BASE_DIR, 'models')
     os.makedirs(MODELS_DIR, exist_ok=True)
-    
+
+    REPORTS_DIR = os.path.join(BASE_DIR, 'reports')
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+
     CAMINHO_DADOS = os.path.join(PROCESSED_DIR, 'dataset_copa_pre_processado.csv')
     
     # ---------------------------------------------------------
     # SELETOR DE MODELO 
     # ---------------------------------------------------------
     # Opções válidas: "Random Forest", "Rede Neural", "Regressao Logistica", "SVM", ou "Todos"
-    MODELO_ALVO = "Random Forest" 
+    MODELO_ALVO = "Regressao Logistica" 
     
     try:
         X_train, X_test, y_train, y_test, scaler, imputer, features = preparar_dados(CAMINHO_DADOS)
@@ -147,9 +168,11 @@ if __name__ == "__main__":
         # Executar lógica de tuning
         if MODELO_ALVO == "Todos":
             for nome, config in CONFIGURACOES_MODELOS.items():
-                tunar_e_avaliar(nome, config, X_train, y_train, X_test, y_test, MODELS_DIR)
+                # Faltava passar o REPORTS_DIR aqui no final 👇
+                tunar_e_avaliar(nome, config, X_train, y_train, X_test, y_test, MODELS_DIR, REPORTS_DIR)
         elif MODELO_ALVO in CONFIGURACOES_MODELOS:
-            tunar_e_avaliar(MODELO_ALVO, CONFIGURACOES_MODELOS[MODELO_ALVO], X_train, y_train, X_test, y_test, MODELS_DIR)
+            # E faltava passar aqui também 👇
+            tunar_e_avaliar(MODELO_ALVO, CONFIGURACOES_MODELOS[MODELO_ALVO], X_train, y_train, X_test, y_test, MODELS_DIR, REPORTS_DIR)
         else:
             print(f"❌ Erro: O modelo '{MODELO_ALVO}' não existe no dicionário.")
             
