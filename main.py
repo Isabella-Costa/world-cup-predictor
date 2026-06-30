@@ -43,9 +43,9 @@ CONFIGURACOES_MODELOS = {
     "Rede Neural": {
         "modelo_base": MLPClassifier(random_state=42, early_stopping=True),
         "parametros": {
-            "hidden_layer_sizes": Categorical([(64,), (128, 64), (64, 32)]), 
+            "hidden_layer_sizes": Integer(32, 256), 
             "activation": Categorical(['relu', 'tanh']),           
-            "learning_rate_init": Real(0.0001, 0.1, prior='log-uniform') # Procura em escala logarítmica
+            "learning_rate_init": Real(0.0001, 0.1, prior='log-uniform')
         }
     },
     "Regressao Logistica": {
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     # SELETOR DE MODELO 
     # ---------------------------------------------------------
     # Opções válidas: "Random Forest", "Rede Neural", "Regressao Logistica", "SVM", ou "Todos"
-    MODELO_ALVO = "Regressao Logistica" 
+    MODELO_ALVO = "Rede Neural" 
     
     try:
         X_train, X_test, y_train, y_test, scaler, imputer, features = preparar_dados(CAMINHO_DADOS)
