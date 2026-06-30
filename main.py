@@ -7,6 +7,10 @@ import time
 # pyrefly: ignore [missing-import]
 import matplotlib.pyplot as plt
 import seaborn as sns
+# pyrefly: ignore [missing-import]
+from skopt import BayesSearchCV
+# pyrefly: ignore [missing-import]
+from skopt.space import Real, Categorical, Integer
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.impute import SimpleImputer
@@ -25,68 +29,85 @@ from sklearn.svm import SVC
 warnings.filterwarnings("ignore")
 
 
-# 1. DICIONÁRIO DE MODELOS E PARÂMETROS (GRID)
+
+# 1. DICIONÁRIO DE MODELOS E PARÂMETROS (BAYESIANO)
 CONFIGURACOES_MODELOS = {
     "Random Forest": {
-        "modelo_base": RandomForestClassifier(random_state=42),
+        "modelo_base": RandomForestClassifier(random_state=42, class_weight='balanced'),
         "parametros": {
-            "n_estimators": [50, 100, 200],       # Número de árvores
-            "max_depth": [None, 10, 20],          # Profundidade da árvore
-            "min_samples_split": [2, 5]           # Amostras mínimas para dividir
+            "n_estimators": Integer(50, 300),         # Qualquer inteiro entre 50 e 300
+            "max_depth": Integer(5, 30),              # Profundidade entre 5 e 30
+            "min_samples_split": Integer(2, 10)       # Amostras entre 2 e 10
         }
     },
     "Rede Neural": {
         "modelo_base": MLPClassifier(random_state=42, early_stopping=True),
         "parametros": {
-            "hidden_layer_sizes": [(64,), (128, 64)], # Arquitetura dos neurónios
-            "activation": ['relu', 'tanh'],           # Funções de ativação
-            "learning_rate_init": [0.001, 0.01]       # Taxa de aprendizagem
+            "hidden_layer_sizes": Categorical([(64,), (128, 64), (64, 32)]), 
+            "activation": Categorical(['relu', 'tanh']),           
+            "learning_rate_init": Real(0.0001, 0.1, prior='log-uniform') # Procura em escala logarítmica
         }
     },
     "Regressao Logistica": {
         "modelo_base": LogisticRegression(random_state=42, max_iter=2000, class_weight='balanced'),
         "parametros": {
-            "C": [0.01, 0.1, 1.0, 10.0],
-            "penalty": ['l2'], 
-            "solver": ['lbfgs', 'newton-cg', 'saga'] 
+            "C": Real(0.001, 100.0, prior='log-uniform'), 
+            "penalty": Categorical(['l2']),                    
+            "solver": Categorical(['lbfgs', 'newton-cg', 'saga']) 
         }
     },
     "SVM": {
-        "modelo_base": SVC(random_state=42, probability=True),
+        "modelo_base": SVC(random_state=42, probability=True, class_weight='balanced'),
         "parametros": {
-            "C": [0.1, 1, 10],                    # Margem de erro permitida
-            "kernel": ['linear', 'rbf']           # Tipo de separação espacial
+            "C": Real(0.1, 50.0, prior='log-uniform'),                    
+            "kernel": Categorical(['linear', 'rbf'])           
         }
     }
 }
 
-# ==========================================
-# 2. FUNÇÃO: PREPARAÇÃO DOS DADOS
-# ==========================================
+# 2.  PREPARAÇÃO DOS DADOS
+def aplicar_engenharia_features(df):
+    # Diferença de Ranking 
+    df['dif_rank'] = df['rank_a'] - df['rank_b']
+
+    # Razão de Valor de Mercado 
+    df['razao_valor'] = df['valor_a'] / (df['valor_b'] + 1)
+
+    # Eficiência Ofensiva 
+    df['eficiencia_ataque_a'] = df['gols_elite_a'] / (df['minutos_elite_a'] + 1)
+    df['eficiencia_ataque_b'] = df['gols_elite_b'] / (df['minutos_elite_b'] + 1)
+
+    # Incompatibilidade Tática 
+    df['vantagem_ofensiva_a'] = df['eficiencia_ataque_a'] - df['eficiencia_ataque_b']
+    
+    return df
+
 def preparar_dados(caminho_csv):
     print(f"A carregar dados de: {caminho_csv}")
     df = pd.read_csv(caminho_csv)
+
+    df = aplicar_engenharia_features(df)
     
     X = df.drop(columns=['resultado'])
     y = df['resultado'].astype(int)
     features_esperadas = list(X.columns)
     
-    # 1. DIVIDIR PRIMEIRO 
+    # DIVIDIR PRIMEIRO 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # 2. IMPUTAÇÃO 
+    # IMPUTAÇÃO 
     imputer = SimpleImputer(strategy='median')
     X_train_imputed = imputer.fit_transform(X_train)
     X_test_imputed = imputer.transform(X_test) # Usar apenas transform!
 
-    # 3. ESCALONAMENTO
+    # ESCALONAMENTO
     scaler = RobustScaler()
     X_train_scaled = scaler.fit_transform(X_train_imputed)
     X_test_scaled = scaler.transform(X_test_imputed) # Usar apenas transform!
 
-    # 4. BALANCEAMENTO 
+    # BALANCEAMENTO 
     print("A aplicar balanceamento SMOTE...")
     smote = SMOTE(random_state=42)
     X_train_balanced, y_train_balanced = smote.fit_resample(X_train_scaled, y_train)
@@ -96,22 +117,31 @@ def preparar_dados(caminho_csv):
 # 3. TUNING 
 def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta_modelos, pasta_relatorios):
     print("\n" + "="*50)
-    print(f"INICIAR TUNING: {nome_modelo}")
+    print(f"INICIAR TUNING BAYESIANO: {nome_modelo}")
     print("="*50)
     
     modelo_base = config["modelo_base"]
     parametros = config["parametros"]
     
-    grid_search = GridSearchCV(estimator=modelo_base, param_grid=parametros, cv=3, scoring='accuracy', n_jobs=-1, verbose=1)
+    otimizador = BayesSearchCV(
+        estimator=modelo_base,
+        search_spaces=parametros,
+        n_iter=15,             # Quantas combinações ele vai tentar (aumente para 30 ou 50 se tiver tempo)
+        cv=3,                  # Cross-validation
+        scoring='accuracy',    # Métrica alvo
+        n_jobs=-1,             # Usa todos os núcleos do processador
+        random_state=42,       # Para reprodutibilidade
+        verbose=1
+    )
     
     start_time = time.time()
-    grid_search.fit(X_train, y_train)
+    otimizador.fit(X_train, y_train)
     tempo_treino = time.time() - start_time
     
-    melhor_modelo = grid_search.best_estimator_
-    melhores_params = grid_search.best_params_
+    melhor_modelo = otimizador.best_estimator_
+    melhores_params = otimizador.best_params_
     
-    print(f"\n✅ Tuning concluído em {tempo_treino:.2f} segundos!")
+    print(f"\n✅ Tuning Bayesiano concluído em {tempo_treino:.2f} segundos!")
     print(f"Melhores Parâmetros Encontrados: {melhores_params}")
     
     y_pred = melhor_modelo.predict(X_test)
@@ -120,7 +150,7 @@ def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta
     print(f"\nAcurácia Final (Teste): {acuracia * 100:.2f}%")
     print("\nRelatório de Classificação Detalhado:")
     print(classification_report(y_test, y_pred))
-    
+
     cm = confusion_matrix(y_test, y_pred)
     plt.figure(figsize=(8, 6))
     labels = ['Derrota (0)', 'Empate (1)', 'Vitória (2)']
@@ -174,10 +204,8 @@ if __name__ == "__main__":
         # Executar lógica de tuning
         if MODELO_ALVO == "Todos":
             for nome, config in CONFIGURACOES_MODELOS.items():
-                # Faltava passar o REPORTS_DIR aqui no final 👇
                 tunar_e_avaliar(nome, config, X_train, y_train, X_test, y_test, MODELS_DIR, REPORTS_DIR)
         elif MODELO_ALVO in CONFIGURACOES_MODELOS:
-            # E faltava passar aqui também 👇
             tunar_e_avaliar(MODELO_ALVO, CONFIGURACOES_MODELOS[MODELO_ALVO], X_train, y_train, X_test, y_test, MODELS_DIR, REPORTS_DIR)
         else:
             print(f"❌ Erro: O modelo '{MODELO_ALVO}' não existe no dicionário.")
