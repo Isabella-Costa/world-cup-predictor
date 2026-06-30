@@ -44,10 +44,11 @@ CONFIGURACOES_MODELOS = {
         }
     },
     "Regressao Logistica": {
-        "modelo_base": LogisticRegression(random_state=42, max_iter=2000),
+        "modelo_base": LogisticRegression(random_state=42, max_iter=2000, class_weight='balanced'),
         "parametros": {
-            "C": [0.1, 1.0, 10.0],                # Regularização (força)
-            "solver": ['lbfgs', 'liblinear']      # Algoritmo de otimização
+            "C": [0.01, 0.1, 1.0, 10.0],
+            "penalty": ['l2'], 
+            "solver": ['lbfgs', 'newton-cg', 'saga'] 
         }
     },
     "SVM": {
@@ -70,22 +71,28 @@ def preparar_dados(caminho_csv):
     y = df['resultado'].astype(int)
     features_esperadas = list(X.columns)
     
-    print("A aplicar tratamento (Imputer + Scaler)...")
+    # 1. DIVIDIR PRIMEIRO 
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    # 2. IMPUTAÇÃO 
     imputer = SimpleImputer(strategy='median')
-    X_imputed = imputer.fit_transform(X)
+    X_train_imputed = imputer.fit_transform(X_train)
+    X_test_imputed = imputer.transform(X_test) # Usar apenas transform!
 
+    # 3. ESCALONAMENTO
     scaler = RobustScaler()
-    X_scaled = scaler.fit_transform(X_imputed)
+    X_train_scaled = scaler.fit_transform(X_train_imputed)
+    X_test_scaled = scaler.transform(X_test_imputed) # Usar apenas transform!
 
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42, stratify=y)
-
+    # 4. BALANCEAMENTO 
     print("A aplicar balanceamento SMOTE...")
     smote = SMOTE(random_state=42)
-    X_train_balanced, y_train_balanced = smote.fit_resample(X_train, y_train)
+    X_train_balanced, y_train_balanced = smote.fit_resample(X_train_scaled, y_train)
     
-    return X_train_balanced, X_test, y_train_balanced, y_test, scaler, imputer, features_esperadas
+    return X_train_balanced, X_test_scaled, y_train_balanced, y_test, scaler, imputer, features_esperadas
 
-# 3. TUNING 
 # 3. TUNING 
 def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta_modelos, pasta_relatorios):
     print("\n" + "="*50)
@@ -129,7 +136,6 @@ def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta
     plt.savefig(nome_ficheiro_matriz)
     plt.close() # Fecha o gráfico na memória para não sobrecarregar
     print(f"Gráfico da Matriz de Confusão guardado em: {nome_ficheiro_matriz}")
-    # ==========================================
     
     caminho_salvar = os.path.join(pasta_modelos, f"{nome_modelo.replace(' ', '_').lower()}_tunnado.pkl")
     joblib.dump(melhor_modelo, caminho_salvar)
