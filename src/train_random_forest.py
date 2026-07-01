@@ -96,3 +96,40 @@ print(f"📊 ACURÁCIA GLOBAL DO MODELO: {acuracia * 100:.2f}%\n")
 # Relatório detalhado por Classe (Essencial para o preenchimento do relatório Word)
 print("--- RELATÓRIO TÉCNICO DE CLASSIFICAÇÃO ---")
 print(classification_report(y_test, y_pred, target_names=['Vitória B (0)', 'Empate (1)', 'Vitória A (2)']))
+
+#8. Artifacts and Graph Plot
+#================================================================================================================
+print("\n[-] Gerando os arquivos visuais e salvando ecossistema...")
+
+# Report 01: Matriz de Confusão
+fig, ax = plt.subplots(figsize=(6, 5))
+cm = confusion_matrix(y_test, y_pred)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['Vitória B', 'Empate', 'Vitória A'])
+disp.plot(cmap=plt.cm.Blues, ax=ax)
+plt.title("Random Forest - Matriz de Confusão", fontsize=11, fontweight='bold', pad=15)
+plt.tight_layout()
+plt.savefig(os.path.join(REPORTS_DIR, '01_rf_confusion_matrix.png'), dpi=300)
+plt.close()
+
+# Report 02: Feature Importance
+fig, ax = plt.subplots(figsize=(8, 13))
+importances = rf_model.feature_importances_
+indices = np.argsort(importances)
+
+plt.title("Random Forest - Importância das Variáveis", fontsize=11, fontweight='bold', pad=15)
+plt.barh(range(len(indices)), importances[indices], color='#2ca02c', align='center')
+plt.yticks(range(len(indices)), [cols_features[i] for i in indices])
+plt.xlabel("Importância Relativa (Critério de Gini)")
+plt.tight_layout()
+plt.savefig(os.path.join(REPORTS_DIR, '02_rf_feature_importance.png'), dpi=300)
+plt.close()
+
+# Exportação dos arquivos .pkl para produção e uso no Streamlit
+joblib.dump(rf_model, os.path.join(MODELS_DIR, 'rf_model.pkl'))
+joblib.dump(scaler, os.path.join(MODELS_DIR, 'scaler_copa.pkl'))
+joblib.dump(imputer, os.path.join(MODELS_DIR, 'imputer_copa.pkl'))
+joblib.dump(cols_features, os.path.join(MODELS_DIR, 'features_esperadas.pkl'))
+
+print("[+] Todos os artefatos salvos! Pronto para integração com o grupo.")
+
+
