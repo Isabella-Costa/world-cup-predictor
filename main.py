@@ -16,7 +16,8 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import RobustScaler
 # pyrefly: ignore [missing-import]
-from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import SMOTE, RandomOverSampler
+from collections import Counter
 
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
@@ -43,9 +44,11 @@ CONFIGURACOES_MODELOS = {
     "Rede Neural": {
         "modelo_base": MLPClassifier(random_state=42, early_stopping=True),
         "parametros": {
-            "hidden_layer_sizes": Integer(32, 256), 
-            "activation": Categorical(['relu', 'tanh']),           
-            "learning_rate_init": Real(0.0001, 0.1, prior='log-uniform')
+            "hidden_layer_sizes": Integer(15, 50), 
+            "activation": Categorical(['relu', 'tanh']), 
+            "solver": Categorical(['adam', 'sgd']),
+            "alpha": Real(0.0001, 1.0, prior='log-uniform'),
+            "learning_rate_init": Real(0.001, 0.01, prior='log-uniform')
         }
     },
     "Regressao Logistica": {
@@ -82,7 +85,7 @@ def aplicar_engenharia_features(df):
     
     return df
 
-def preparar_dados(caminho_csv):
+def preparar_dados(caminho_csv, tipo_balanceamento='ROS'):
     print(f"A carregar dados de: {caminho_csv}")
     df = pd.read_csv(caminho_csv)
 
@@ -108,14 +111,44 @@ def preparar_dados(caminho_csv):
     X_test_scaled = scaler.transform(X_test_imputed) # Usar apenas transform!
 
     # BALANCEAMENTO 
-    print("A aplicar balanceamento SMOTE...")
-    smote = SMOTE(random_state=42)
-    X_train_balanced, y_train_balanced = smote.fit_resample(X_train_scaled, y_train)
+    print(f"A aplicar balanceamento {tipo_balanceamento}...")
+    
+    if tipo_balanceamento == 'SMOTE':
+        sampler = SMOTE(random_state=42)
+        X_train_balanced, y_train_balanced = sampler.fit_resample(X_train_scaled, y_train)
+    elif tipo_balanceamento == 'ROS':
+        sampler = RandomOverSampler(random_state=42)
+        X_train_balanced, y_train_balanced = sampler.fit_resample(X_train_scaled, y_train)
+    elif tipo_balanceamento == 'MIX':
+        contagem = Counter(y_train)
+        max_count = max(contagem.values())
+        alvo_smote = {k: max(v, int(0.5 * max_count)) for k, v in contagem.items()}
+        
+        smote = SMOTE(sampling_strategy=alvo_smote, random_state=42)
+        X_train_smote, y_train_smote = smote.fit_resample(X_train_scaled, y_train)
+        
+        ros = RandomOverSampler(random_state=42)
+        X_train_balanced, y_train_balanced = ros.fit_resample(X_train_smote, y_train_smote)
+    else:
+        X_train_balanced, y_train_balanced = X_train_scaled, y_train
     
     return X_train_balanced, X_test_scaled, y_train_balanced, y_test, scaler, imputer, features_esperadas
 
 # 3. TUNING 
-def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta_modelos, pasta_relatorios):
+def formatar_nome_pasta(nome):
+    palavras = nome.split()
+    if len(palavras) == 1:
+        return palavras[0].lower()
+    return palavras[0].lower() + ''.join(p.capitalize() for p in palavras[1:])
+
+def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta_modelos, pasta_relatorios, scaler, imputer, features):
+    nome_pasta_modelo = formatar_nome_pasta(nome_modelo)
+    pasta_modelo_especifico = os.path.join(pasta_modelos, nome_pasta_modelo)
+    pasta_relatorios_especifico = os.path.join(pasta_relatorios, nome_pasta_modelo)
+    
+    os.makedirs(pasta_modelo_especifico, exist_ok=True)
+    os.makedirs(pasta_relatorios_especifico, exist_ok=True)
+
     print("\n" + "="*50)
     print(f"INICIAR TUNING BAYESIANO: {nome_modelo}")
     print("="*50)
@@ -162,14 +195,19 @@ def tunar_e_avaliar(nome_modelo, config, X_train, y_train, X_test, y_test, pasta
     plt.tight_layout()
     
     # Guardar a imagem na pasta reports
-    nome_ficheiro_matriz = os.path.join(pasta_relatorios, f"matriz_confusao_{nome_modelo.replace(' ', '_').lower()}.png")
-    plt.savefig(nome_ficheiro_matriz)
+    nome_pasta_matriz = os.path.join(pasta_relatorios_especifico, f"matriz_confusao_{nome_pasta_modelo}.png")
+    plt.savefig(nome_pasta_matriz)
     plt.close() # Fecha o gráfico na memória para não sobrecarregar
-    print(f"Gráfico da Matriz de Confusão guardado em: {nome_ficheiro_matriz}")
+    print(f"Gráfico da Matriz de Confusão guardado em: {nome_pasta_matriz}")
     
-    caminho_salvar = os.path.join(pasta_modelos, f"{nome_modelo.replace(' ', '_').lower()}_tunnado.pkl")
+    caminho_salvar = os.path.join(pasta_modelo_especifico, f"{nome_pasta_modelo}_tunnado.pkl")
     joblib.dump(melhor_modelo, caminho_salvar)
     print(f"Modelo guardado em: {caminho_salvar}")
+    
+    # Salvar as ferramentas auxiliares específicas do modelo
+    joblib.dump(scaler, os.path.join(pasta_modelo_especifico, 'scaler_copa.pkl'))
+    joblib.dump(imputer, os.path.join(pasta_modelo_especifico, 'imputer_copa.pkl'))
+    joblib.dump(features, os.path.join(pasta_modelo_especifico, 'features_esperadas.pkl'))
     
     return melhor_modelo
 
@@ -192,21 +230,17 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     # Opções válidas: "Random Forest", "Rede Neural", "Regressao Logistica", "SVM", ou "Todos"
     MODELO_ALVO = "Rede Neural" 
+    TIPO_BALANCEAMENTO = "ROS" # Pode ser "SMOTE", "ROS" ou "MIX"
     
     try:
-        X_train, X_test, y_train, y_test, scaler, imputer, features = preparar_dados(CAMINHO_DADOS)
-        
-        # Salvar as ferramentas auxiliares
-        joblib.dump(scaler, os.path.join(MODELS_DIR, 'scaler_copa.pkl'))
-        joblib.dump(imputer, os.path.join(MODELS_DIR, 'imputer_copa.pkl'))
-        joblib.dump(features, os.path.join(MODELS_DIR, 'features_esperadas.pkl'))
+        X_train, X_test, y_train, y_test, scaler, imputer, features = preparar_dados(CAMINHO_DADOS, tipo_balanceamento=TIPO_BALANCEAMENTO)
         
         # Executar lógica de tuning
         if MODELO_ALVO == "Todos":
             for nome, config in CONFIGURACOES_MODELOS.items():
-                tunar_e_avaliar(nome, config, X_train, y_train, X_test, y_test, MODELS_DIR, REPORTS_DIR)
+                tunar_e_avaliar(nome, config, X_train, y_train, X_test, y_test, MODELS_DIR, REPORTS_DIR, scaler, imputer, features)
         elif MODELO_ALVO in CONFIGURACOES_MODELOS:
-            tunar_e_avaliar(MODELO_ALVO, CONFIGURACOES_MODELOS[MODELO_ALVO], X_train, y_train, X_test, y_test, MODELS_DIR, REPORTS_DIR)
+            tunar_e_avaliar(MODELO_ALVO, CONFIGURACOES_MODELOS[MODELO_ALVO], X_train, y_train, X_test, y_test, MODELS_DIR, REPORTS_DIR, scaler, imputer, features)
         else:
             print(f"❌ Erro: O modelo '{MODELO_ALVO}' não existe no dicionário.")
             
